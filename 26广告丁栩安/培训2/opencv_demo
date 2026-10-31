@@ -1,0 +1,506 @@
+
+# 最低 CMake 版本
+cmake_minimum_required(VERSION 3.16)
+
+# 项目名称和语言
+project(opencv_demo LANGUAGES CXX)
+
+# 使用 C++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# 查找 OpenCV。若 CMake 找不到，可在配置时传 -DOpenCV_DIR=...
+find_package(OpenCV REQUIRED)
+
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+
+# 生成可执行程序
+add_executable(opencv_demo main.cpp)
+
+# 头文件目录和链接库都来自 find_package 的结果
+target_include_directories(opencv_demo PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(opencv_demo PRIVATE ${OpenCV_LIBS})
+
+if(MSVC)
+    # 源文件使用 UTF-8，避免中文注释在 GBK 代码页下被误读
+    target_compile_options(opencv_demo PRIVATE /utf-8 /W4)
+endif()
+
+# 把 images 文件夹复制到 exe 旁边，保证从 build 目录运行也能找到图片
+add_custom_command(TARGET opencv_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/images"
+        "$<TARGET_FILE_DIR:opencv_demo>/images"
+    COMMENT "Copying images to the executable directory"
+)
+
+# Windows 下 OpenCV 通常是动态库，把运行所需 DLL 复制到 exe 旁边
+if(WIN32)
+    file(GLOB OPENCV_RUNTIME_DLLS
+        "${OpenCV_DIR}/x64/*/bin/opencv_*.dll"
+    )
+    # 本项目按 Release 构建，过滤掉带 d 后缀的 Debug DLL
+    list(FILTER OPENCV_RUNTIME_DLLS EXCLUDE REGEX "d\\.dll$")
+    if(OPENCV_RUNTIME_DLLS)
+        add_custom_command(TARGET opencv_demo POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${OPENCV_RUNTIME_DLLS}
+                "$<TARGET_FILE_DIR:opencv_demo>"
+            COMMENT "Copying OpenCV runtime DLLs"
+        )
+    endif()
+endif()
+
+#include <opencv2/opencv.hpp>
+
+#include <iostream>
+#include <string>
+
+int main(int argc, char** argv) {
+    // 默认读取 images/sample.jpg；也可以从命令行传入图片路径。
+    const std::string imagePath = (argc > 1) ? argv[1] : "images/sample.jpg";
+
+    try {
+        cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR);
+        if (image.empty()) {
+            std::cerr << "Failed to read image: " << imagePath << '\n';
+            std::cerr << "Please check that the file exists and is a valid image.\n";
+            return 1;
+        }
+
+        std::cout << "OpenCV version: " << CV_VERSION << '\n';
+        std::cout << "Image path: " << imagePath << '\n';
+        std::cout << "Image size: " << image.cols << " x " << image.rows
+                  << ", channels: " << image.channels() << '\n';
+        std::cout << "Press any key in the image window to exit...\n";
+
+        const std::string windowName = "OpenCV Image Viewer";
+        cv::namedWindow(windowName, cv::WINDOW_AUTOSIZE);
+        cv::imshow(windowName, image);
+        cv::waitKey(0);
+        cv::destroyAllWindows();
+    } catch (const cv::Exception& error) {
+        std::cerr << "OpenCV error: " << error.what() << '\n';
+        return 1;
+    }
+
+    return 0;
+}
+
+# OpenCV 读取并显示图片：CMake + find_package
+
+## 1. 作业完成内容
+
+- 用 C++ 和 OpenCV 读取一张图片。
+- 检查图片是否读取成功。
+- 用 `cv::imshow` 显示图片，按任意键关闭窗口。
+- 用 CMake 管理工程。
+- 用 `find_package(OpenCV REQUIRED)` 查找 OpenCV。
+- 用 `target_link_libraries` 链接 OpenCV。
+- 用命令行完成配置、编译、运行。
+
+测试图片：
+
+![sample](images/sample.jpg)
+
+---
+
+## 2. 项目结构
+
+```text
+opencv_demo/
+├── CMakeLists.txt
+├── main.cpp
+├── README.md
+└── images/
+    └── sample.jpg
+```
+
+- `main.cpp`：程序入口，读取并显示图片。
+- `CMakeLists.txt`：告诉 CMake 如何找到 OpenCV、如何编译和链接。
+- `images/sample.jpg`：测试图片，可以换成自己的图片。
+
+---
+
+## 3. 本机环境
+
+这次实际使用的环境：
+
+| 项目 | 版本/路径 |
+| --- | --- |
+| 编译器 | Visual Studio 2026 MSVC x64 |
+| CMake | Visual Studio 自带的 CMake |
+| OpenCV | 5.0.0，Windows 预编译包 |
+| OpenCV 配置目录 | `C:/Users/Lenovo/opencv_local/opencv/build` |
+
+> `OpenCV_DIR` 必须指向包含 `OpenCVConfig.cmake` 的目录，不是 `bin`，也不是 `include`。
+
+---
+
+## 4. 命令行编译运行（重点）
+
+在 VS Code 中按 **“终端 → 新建终端”**，然后：
+
+```powershell
+cd C:\Users\Lenovo\opencv_demo
+```
+
+设置 CMake 完整路径：
+
+```powershell
+$cmake = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+```
+
+### 4.1 配置
+
+```powershell
+& $cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DOpenCV_DIR="C:/Users/Lenovo/opencv_local/opencv/build"
+```
+
+参数含义：
+
+| 参数 | 作用 |
+| --- | --- |
+| `-S .` | 源码目录是当前目录 |
+| `-B build` | 构建目录是 `build` |
+| `-G "Visual Studio 18 2026"` | 使用 Visual Studio 2026 生成器 |
+| `-A x64` | 生成 64 位程序 |
+| `-DOpenCV_DIR=...` | 告诉 CMake 去哪里找 `OpenCVConfig.cmake` |
+
+成功时会看到：
+
+```text
+-- Found OpenCV: C:/Users/Lenovo/opencv_local/opencv/build (found version "5.0.0")
+-- Configuring done
+-- Generating done
+```
+
+### 4.2 编译
+
+```powershell
+& $cmake --build build --config Release
+```
+
+成功时会看到：
+
+```text
+opencv_demo.vcxproj -> C:\Users\Lenovo\opencv_demo\build\Release\opencv_demo.exe
+已成功生成。
+    0 个警告
+    0 个错误
+```
+
+### 4.3 运行
+
+```powershell
+.\build\Release\opencv_demo.exe
+```
+
+程序会：
+
+1. 读取 `images/sample.jpg`。
+2. 打印 OpenCV 版本和图片尺寸。
+3. 弹出一个窗口显示图片。
+4. 在窗口中按任意键关闭。
+
+也可以传入自己的图片：
+
+```powershell
+.\build\Release\opencv_demo.exe "D:\Pictures\test.jpg"
+```
+
+---
+
+## 5. CMakeLists.txt 逐段说明
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+
+project(opencv_demo LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+```
+
+- 要求 CMake 至少是 3.16。
+- 项目名 `opencv_demo`，只使用 C++。
+- 使用 C++17。
+
+```cmake
+find_package(OpenCV REQUIRED)
+```
+
+这是作业要求的核心：
+
+- CMake 会去寻找 `OpenCVConfig.cmake`。
+- 找到后自动设置：
+  - `OpenCV_VERSION`
+  - `OpenCV_INCLUDE_DIRS`
+  - `OpenCV_LIBS`
+- `REQUIRED` 表示找不到就报错，不继续生成。
+
+```cmake
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+```
+
+把找到的版本、头文件目录、库名打印出来，方便检查。
+
+```cmake
+add_executable(opencv_demo main.cpp)
+```
+
+用 `main.cpp` 生成可执行程序 `opencv_demo`。
+
+```cmake
+target_include_directories(opencv_demo PRIVATE ${OpenCV_INCLUDE_DIRS})
+```
+
+把 OpenCV 的头文件目录加入编译器的搜索路径，否则会报：
+
+```text
+opencv2/opencv.hpp: No such file or directory
+```
+
+```cmake
+target_link_libraries(opencv_demo PRIVATE ${OpenCV_LIBS})
+```
+
+把 OpenCV 的库链接进 exe，否则会报大量：
+
+```text
+unresolved external symbol ...
+```
+
+`PRIVATE` 表示这是 `opencv_demo` 自己使用的依赖。
+
+```cmake
+if(MSVC)
+    target_compile_options(opencv_demo PRIVATE /utf-8 /W4)
+endif()
+```
+
+- `/utf-8`：告诉 MSVC 源文件是 UTF-8。
+- 不加它，中文注释在中文 Windows 的 GBK 代码页下可能出现 `C4819`，甚至导致编译错误。
+- `/W4`：打开较严格的警告。
+
+```cmake
+add_custom_command(TARGET opencv_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/images"
+        "$<TARGET_FILE_DIR:opencv_demo>/images"
+)
+```
+
+把 `images` 文件夹复制到 exe 旁边。这样从 `build\Release` 运行时，默认的 `images/sample.jpg` 也能找到。
+
+```cmake
+if(WIN32)
+    file(GLOB OPENCV_RUNTIME_DLLS
+        "${OpenCV_DIR}/x64/*/bin/opencv_*.dll"
+    )
+    list(FILTER OPENCV_RUNTIME_DLLS EXCLUDE REGEX "d\\.dll$")
+    if(OPENCV_RUNTIME_DLLS)
+        add_custom_command(TARGET opencv_demo POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${OPENCV_RUNTIME_DLLS}
+                "$<TARGET_FILE_DIR:opencv_demo>"
+        )
+    endif()
+endif()
+```
+
+Windows 下 OpenCV 通常是动态库：
+
+- 编译时需要 `.lib`。
+- 运行时需要 `.dll`，例如 `opencv_world500.dll`。
+- 这一段把 Release 所需的 OpenCV DLL 复制到 exe 旁边。
+- 不复制的话，双击 exe 可能报“找不到 opencv_world500.dll”。
+
+---
+
+## 6. main.cpp 逐段说明
+
+```cpp
+#include <opencv2/opencv.hpp>
+```
+
+包含 OpenCV 的总头文件。初学阶段这样写最简单。
+
+```cpp
+const std::string imagePath = (argc > 1) ? argv[1] : "images/sample.jpg";
+```
+
+- 没有命令行参数时，读取默认图片 `images/sample.jpg`。
+- 有参数时，读取用户指定的图片路径。
+
+```cpp
+cv::Mat image = cv::imread(imagePath, cv::IMREAD_COLOR);
+```
+
+- `cv::imread`：读取图片。
+- `cv::IMREAD_COLOR`：按彩色图读取。
+- 返回值是 `cv::Mat`，OpenCV 用来保存图像的数据结构。
+
+```cpp
+if (image.empty()) {
+    std::cerr << "Failed to read image: " << imagePath << '\n';
+    return 1;
+}
+```
+
+必须检查 `image.empty()`：
+
+- 路径写错。
+- 文件不存在。
+- 文件不是图片。
+- 没有读取权限。
+
+这些情况 `imread` 不会抛异常，而是返回空 `Mat`。
+
+```cpp
+cv::namedWindow(windowName, cv::WINDOW_AUTOSIZE);
+cv::imshow(windowName, image);
+cv::waitKey(0);
+cv::destroyAllWindows();
+```
+
+- `namedWindow`：创建窗口。
+- `WINDOW_AUTOSIZE`：窗口大小跟随图片。
+- `imshow`：把图片显示到窗口。
+- `waitKey(0)`：等待用户按键；`0` 表示一直等。
+- `destroyAllWindows`：关闭所有 OpenCV 窗口。
+
+```cpp
+catch (const cv::Exception& error) {
+    std::cerr << "OpenCV error: " << error.what() << '\n';
+    return 1;
+}
+```
+
+捕获 OpenCV 的异常，避免程序直接崩溃。
+
+---
+
+## 7. 实际运行结果
+
+```text
+OpenCV version: 5.0.0
+Image path: images/sample.jpg
+Image size: 800 x 600, channels: 3
+Press any key in the image window to exit...
+```
+
+随后会弹出窗口显示测试图片。窗口中按任意键即可退出。
+
+构建产物：
+
+```text
+build/Release/opencv_demo.exe
+build/Release/opencv_world500.dll
+build/Release/opencv_videoio_ffmpeg500_64.dll
+build/Release/opencv_videoio_msmf500_64.dll
+build/Release/images/sample.jpg
+```
+
+---
+
+## 8. 常见报错
+
+### 8.1 `Could not find OpenCVConfig.cmake`
+
+原因：CMake 不知道 OpenCV 装在哪里。
+
+解决：配置时加：
+
+```powershell
+-DOpenCV_DIR="你的OpenCV路径/build"
+```
+
+例如：
+
+```powershell
+-DOpenCV_DIR="C:/Users/Lenovo/opencv_local/opencv/build"
+```
+
+注意路径最后是 `build`，不是 `bin`。
+
+### 8.2 `找不到 opencv_world500.dll`
+
+原因：运行时找不到 OpenCV 的动态库。
+
+解决：
+
+- 本项目已用 POST_BUILD 自动复制 DLL。
+- 如果仍然报错，把 `...\opencv\build\x64\vc16\bin` 加入 PATH，或手动复制 DLL 到 exe 旁边。
+
+### 8.3 `imread` 返回空
+
+原因通常是路径不对。
+
+解决：
+
+- 确认图片真的存在。
+- 从项目根目录运行，或传入绝对路径：
+
+```powershell
+.\build\Release\opencv_demo.exe "C:\Users\Lenovo\opencv_demo\images\sample.jpg"
+```
+
+### 8.4 `C4819` 或中文注释导致编译错误
+
+原因：MSVC 按 GBK 读取 UTF-8 源文件。
+
+解决：保留：
+
+```cmake
+target_compile_options(opencv_demo PRIVATE /utf-8)
+```
+
+### 8.5 `LNK1112` 或模块计算机类型冲突
+
+原因：OpenCV 是 64 位库，但项目按 32 位编译。
+
+解决：配置时加：
+
+```powershell
+-A x64
+```
+
+### 8.6 生成器或缓存冲突
+
+如果之前用 MinGW，现在改用 Visual Studio，必须删掉旧的 `build`：
+
+```powershell
+Remove-Item -Recurse -Force .\build
+```
+
+然后重新配置。
+
+---
+
+## 9. 提交说明
+
+提交时只需要：
+
+```text
+CMakeLists.txt
+main.cpp
+README.md
+images/sample.jpg
+```
+
+不要提交：
+
+```text
+build/
+```
+
+`build` 是编译生成目录，删除后重新执行配置和编译即可。
+
+如果老师要求用 OpenCV 4.x，代码不用改；只要把 `OpenCV_DIR` 指向老师电脑上的 OpenCV 4.x 的 `build` 目录即可。`find_package(OpenCV REQUIRED)` 和 `${OpenCV_LIBS}` 是通用写法。
